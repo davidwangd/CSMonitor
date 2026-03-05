@@ -34,6 +34,8 @@ struct JobState {
     std::string stderr_content;
     bool stdout_changed = false;
     bool stderr_changed = false;
+    bool finished = false;
+    bool viewed = false;
 };
 
 class MonitorImpl {
@@ -82,14 +84,18 @@ private:
                 const auto& job = job_list_[i];
                 auto it = job_states_.find(job);
                 bool has_update = false;
+                bool is_finished = false;
                 if (it != job_states_.end()) {
                     has_update = it->second.stdout_changed || it->second.stderr_changed;
+                    is_finished = it->second.finished;
                 }
 
                 Element job_elem = text(job);
 
                 if (i == selected_index_) {
                     job_elem = job_elem | inverted;
+                } else if (is_finished) {
+                    job_elem = job_elem | bgcolor(Color::Red);
                 } else if (has_update) {
                     job_elem = job_elem | bgcolor(Color::Yellow);
                 }
@@ -146,10 +152,22 @@ private:
                 stderr_content = vbox(std::move(stderr_elements)) | vscroll_indicator | yframe;
             }
 
+            bool is_current_finished = false;
+            if (!job_list_.empty() && selected_index_ < job_list_.size()) {
+                const auto& current_job = job_list_[selected_index_];
+                auto it = job_states_.find(current_job);
+                if (it != job_states_.end()) {
+                    is_current_finished = it->second.finished;
+                }
+            }
+
             auto left_pane = stdout_content | flex | frame | border;
             auto right_pane = stderr_content | flex | frame | border;
 
-            if (stdout_pane_focused_) {
+            if (is_current_finished) {
+                left_pane = left_pane | color(Color::Red);
+                right_pane = right_pane | color(Color::Red);
+            } else if (stdout_pane_focused_) {
                 left_pane = left_pane | color(Color::Cyan);
             } else {
                 right_pane = right_pane | color(Color::Cyan);
@@ -178,7 +196,15 @@ private:
         renderer |= CatchEvent([this](Event event) {
             if (event == Event::ArrowLeft || event == Event::Character('h')) {
                 if (selected_index_ > 0) {
+                    if (!job_list_.empty() && selected_index_ < job_list_.size()) {
+                        const auto& current_job = job_list_[selected_index_];
+                        auto it = job_states_.find(current_job);
+                        if (it != job_states_.end() && it->second.finished) {
+                            it->second.viewed = true;
+                        }
+                    }
                     --selected_index_;
+                    cleanup_viewed_finished_jobs();
                     clear_change_flags();
                     update_selected_job();
                     reset_scroll_to_bottom();
@@ -187,7 +213,15 @@ private:
             }
             if (event == Event::ArrowRight || event == Event::Character('l')) {
                 if (selected_index_ + 1 < job_list_.size()) {
+                    if (!job_list_.empty() && selected_index_ < job_list_.size()) {
+                        const auto& current_job = job_list_[selected_index_];
+                        auto it = job_states_.find(current_job);
+                        if (it != job_states_.end() && it->second.finished) {
+                            it->second.viewed = true;
+                        }
+                    }
                     ++selected_index_;
+                    cleanup_viewed_finished_jobs();
                     clear_change_flags();
                     update_selected_job();
                     reset_scroll_to_bottom();
@@ -241,17 +275,17 @@ private:
 
         std::unordered_set<std::string> new_job_set(new_jobs.begin(), new_jobs.end());
 
-        std::vector<std::string> to_remove;
-        for (const auto& [job, state] : job_states_) {
-            if (new_job_set.find(job) == new_job_set.end()) {
-                to_remove.push_back(job);
+        for (auto& [job, state] : job_states_) {
+            if (new_job_set.find(job) == new_job_set.end() && !state.finished) {
+                state.finished = true;
             }
         }
-        for (const auto& job : to_remove) {
-            job_states_.erase(job);
-        }
 
-        job_list_ = new_jobs;
+        for (const auto& job : new_jobs) {
+            if (std::find(job_list_.begin(), job_list_.end(), job) == job_list_.end()) {
+                job_list_.push_back(job);
+            }
+        }
 
         for (const auto& job : job_list_) {
             auto stdout_file = get_job_stdout_file(job);
@@ -325,6 +359,25 @@ private:
         stderr_focus_line_ = stderr_lines.empty() ? 0 : static_cast<int>(stderr_lines.size()) - 1;
     }
 
+    void cleanup_viewed_finished_jobs() {
+        std::vector<std::string> to_remove;
+        for (const auto& job : job_list_) {
+            auto it = job_states_.find(job);
+            if (it != job_states_.end() && it->second.finished && it->second.viewed) {
+                to_remove.push_back(job);
+            }
+        }
+        
+        for (const auto& job : to_remove) {
+            job_states_.erase(job);
+            job_list_.erase(std::remove(job_list_.begin(), job_list_.end(), job), job_list_.end());
+        }
+        
+        if (selected_index_ >= job_list_.size() && !job_list_.empty()) {
+            selected_index_ = job_list_.size() - 1;
+        }
+    }
+
     int tick_interval_ms_;
     size_t selected_index_;
     int stdout_focus_line_;
@@ -337,6 +390,7 @@ private:
     std::string current_stdout_;
     std::string current_stderr_;
     std::string current_info_;
+    std::string previously_selected_job_;
 
     FileWatcher file_watcher_;
 };
