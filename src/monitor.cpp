@@ -30,12 +30,16 @@ static std::vector<std::string> split_lines(const std::string& content) {
 
 struct JobState {
     std::string name;
+    std::string info;
+    std::string stdout_file;
+    std::string stderr_file;
     std::string stdout_content;
     std::string stderr_content;
     bool stdout_changed = false;
     bool stderr_changed = false;
     bool finished = false;
     bool viewed = false;
+    bool initialized = false;
 };
 
 class MonitorImpl {
@@ -288,22 +292,26 @@ private:
         }
 
         for (const auto& job : job_list_) {
-            auto stdout_file = get_job_stdout_file(job);
-            auto stderr_file = get_job_stderr_file(job);
-
             auto& state = job_states_[job];
             state.name = job;
 
-            if (!stdout_file.empty()) {
-                auto info = file_watcher_.get_file_info(stdout_file);
+            if (!state.initialized) {
+                state.info = get_job_info(job);
+                state.stdout_file = get_job_stdout_file(job);
+                state.stderr_file = get_job_stderr_file(job);
+                state.initialized = true;
+            }
+
+            if (!state.stdout_file.empty()) {
+                auto info = file_watcher_.get_file_info(state.stdout_file);
                 if (info) {
                     state.stdout_content = info->content;
                     state.stdout_changed = info->has_changed;
                 }
             }
 
-            if (!stderr_file.empty()) {
-                auto info = file_watcher_.get_file_info(stderr_file);
+            if (!state.stderr_file.empty()) {
+                auto info = file_watcher_.get_file_info(state.stderr_file);
                 if (info) {
                     state.stderr_content = info->content;
                     state.stderr_changed = info->has_changed;
@@ -321,13 +329,14 @@ private:
         }
 
         const auto& job = job_list_[selected_index_];
-        current_info_ = get_job_info(job);
 
         auto it = job_states_.find(job);
         if (it != job_states_.end()) {
+            current_info_ = it->second.info;
             current_stdout_ = it->second.stdout_content;
             current_stderr_ = it->second.stderr_content;
         } else {
+            current_info_ = get_job_info(job);
             auto stdout_file = get_job_stdout_file(job);
             auto stderr_file = get_job_stderr_file(job);
 

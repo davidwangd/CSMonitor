@@ -64,18 +64,21 @@ cppcheck --enable=all src/ include/
 ## Project Structure
 
 ```
-C2-monitor/
+CSMonitor/
 ├── CMakeLists.txt          # Main CMake configuration
 ├── include/                # Public headers
-│   └── monitor.hpp         # Main library interface
+│   └── monitor/
+│       └── monitor.hpp     # Main library interface
 ├── src/                    # Library implementation
-│   └── monitor.cpp
+│   ├── monitor.cpp
+│   └── file_watcher.hpp
 ├── tests/                  # Test files
 │   ├── CMakeLists.txt
 │   └── test_monitor.cpp
-├── third_party/            # External dependencies (FXTUI)
-│   └── fxtui/
+├── third_party/            # External dependencies
+│   └── ftxui/              # FTXUI library
 └── examples/               # Example implementations
+    ├── CMakeLists.txt
     └── example_monitor.cpp
 ```
 
