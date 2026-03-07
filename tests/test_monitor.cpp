@@ -58,8 +58,8 @@ int main() {
     std::cout << "\nPress 'q' or Escape to quit.\n";
     std::cout << "Use left/right arrows or 'h'/'l' to navigate between jobs.\n\n";
 
-    try {
-        process_monitor::run_monitor(1000);
+try {
+        process_monitor::run_monitor(1000, 100);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         cleanup_test_files();

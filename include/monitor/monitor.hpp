@@ -5,7 +5,7 @@
 
 namespace process_monitor {
 
-void run_monitor(int tick_interval_ms = 1000);
+void run_monitor(int tick_interval_ms = 1000, int wrap_width = 100);
 
 }
 

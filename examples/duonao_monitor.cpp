@@ -60,14 +60,17 @@ std::string get_job_info(const std::string& job) {
 
 int main(int argc, char* argv[]) {
     int tick_interval_ms = 1000;
+    int wrap_width = 100;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if ((arg == "-t" || arg == "--tick") && i + 1 < argc) {
             tick_interval_ms = std::stoi(argv[++i]);
+        } else if ((arg == "-w" || arg == "--wrap-width") && i + 1 < argc) {
+            wrap_width = std::stoi(argv[++i]);
         }
     }
 
-    process_monitor::run_monitor(tick_interval_ms);
+    process_monitor::run_monitor(tick_interval_ms, wrap_width);
     return 0;
 }

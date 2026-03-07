@@ -78,6 +78,7 @@ void simulate_job_output() {
             std::ofstream out(example_dir + "/" + job + ".out");
             std::ofstream err(example_dir + "/" + job + ".err");
             out << "[" << job << "] Starting up...\n";
+            out << "[" << job << "] This is a very long line to test wrapping: item1=12345, item2=67890, item3=abcdef, item4=ghijkl, item5=mnopqr, item6=stuvwx, item7=yz1234, item8=567890, item9=abcdef, item10=ghijkl [END]\n";
             err << "[" << job << "] No errors yet\n";
         }
     }
@@ -92,9 +93,17 @@ void simulate_job_output() {
             std::ofstream out(example_dir + "/" + job + ".out", std::ios::app);
             out << "[" << job << "] Log entry #" << job_counters[job] << "\n";
 
+            if (job_counters[job] % 10 == 0) {
+                out << "[" << job << "] Long line test: batch processing data - item1=12345, item2=67890, item3=abcdef, item4=ghijkl, item5=mnopqr, item6=stuvwx, item7=yz1234, item8=567890, item9=abcdef, item10=ghijkl, item11=mnopqr, item12=stuvwx [COMPLETE]\n";
+            }
+
             if (job_counters[job] % 5 == 0) {
                 std::ofstream err(example_dir + "/" + job + ".err", std::ios::app);
-                err << "[" << job << "] Warning: something happened at #" << job_counters[job] << "\n";
+                if (job_counters[job] % 15 == 0) {
+                    err << "[" << job << "] CRITICAL WARNING: Connection timeout occurred while processing request from client 192.168.1.100:8080, retrying... attempt 1/3, backoff=500ms, status=RETRYING\n";
+                } else {
+                    err << "[" << job << "] Warning: something happened at #" << job_counters[job] << "\n";
+                }
             }
         }
     }
@@ -111,8 +120,20 @@ void cleanup() {
     fs::remove_all(example_dir);
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     std::srand(std::time(nullptr));
+    
+    int tick_interval = 1000;
+    int wrap_width = 100;
+    
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == "--tick" || arg == "-t") && i + 1 < argc) {
+            tick_interval = std::stoi(argv[++i]);
+        } else if ((arg == "--wrap-width" || arg == "-w") && i + 1 < argc) {
+            wrap_width = std::stoi(argv[++i]);
+        }
+    }
     
     std::cout << "Process Monitor Example\n";
     std::cout << "=======================\n\n";
@@ -122,7 +143,12 @@ int main() {
     std::cout << "Controls:\n";
     std::cout << "  - Left/Right arrows or 'h'/'l': Navigate between jobs\n";
     std::cout << "  - Tab: Switch between stdout and stderr panes\n";
+    std::cout << "  - Up/Down arrows or 'j'/'k': Scroll content\n";
+    std::cout << "  - PageUp/PageDown: Fast scroll\n";
     std::cout << "  - 'q' or Escape: Quit\n\n";
+    std::cout << "Options:\n";
+    std::cout << "  --tick, -t <ms>: Tick interval (default: 1000)\n";
+    std::cout << "  --wrap-width, -w <chars>: Line wrap width (default: 100)\n\n";
     std::cout << "Jobs being monitored:\n";
     for (const auto& job : jobs) {
         std::cout << "  - " << job << "\n";
@@ -133,7 +159,7 @@ int main() {
     job_mgmt_thread = std::thread(manage_jobs);
 
     try {
-        process_monitor::run_monitor(1000);
+        process_monitor::run_monitor(tick_interval, wrap_width);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";
         cleanup();

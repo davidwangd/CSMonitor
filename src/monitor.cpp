@@ -5,6 +5,7 @@
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/string.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -28,6 +29,51 @@ static std::vector<std::string> split_lines(const std::string& content) {
     return lines;
 }
 
+static std::vector<std::string> wrap_line(const std::string& line, int width) {
+    if (width <= 0 || line.empty()) {
+        return {line};
+    }
+    
+    std::vector<std::string> wrapped_lines;
+    int line_width = string_width(line);
+    
+    if (line_width <= width) {
+        wrapped_lines.push_back(line);
+        return wrapped_lines;
+    }
+    
+    std::string current_line;
+    int current_width = 0;
+    
+    for (char c : line) {
+        int char_width = string_width(std::string(1, c));
+        if (current_width + char_width > width && !current_line.empty()) {
+            wrapped_lines.push_back(current_line);
+            current_line.clear();
+            current_width = 0;
+        }
+        current_line += c;
+        current_width += char_width;
+    }
+    
+    if (!current_line.empty()) {
+        wrapped_lines.push_back(current_line);
+    }
+    
+    return wrapped_lines;
+}
+
+static std::vector<std::string> wrap_lines(const std::vector<std::string>& lines, int width) {
+    std::vector<std::string> result;
+    for (const auto& line : lines) {
+        auto wrapped = wrap_line(line, width);
+        for (const auto& wl : wrapped) {
+            result.push_back(wl);
+        }
+    }
+    return result;
+}
+
 struct JobState {
     std::string name;
     std::string info;
@@ -44,8 +90,9 @@ struct JobState {
 
 class MonitorImpl {
 public:
-    MonitorImpl(int tick_interval_ms)
+    MonitorImpl(int tick_interval_ms, int wrap_width)
         : tick_interval_ms_(tick_interval_ms)
+        , wrap_width_(wrap_width)
         , selected_index_(0)
         , stdout_focus_line_(0)
         , stderr_focus_line_(0)
@@ -116,8 +163,8 @@ private:
             }
             auto navbar = hbox(nav_elements) | border;
 
-            auto stdout_lines = split_lines(current_stdout_);
-            auto stderr_lines = split_lines(current_stderr_);
+            auto stdout_lines = wrap_lines(split_lines(current_stdout_), wrap_width_);
+            auto stderr_lines = wrap_lines(split_lines(current_stderr_), wrap_width_);
 
             stdout_focus_line_ = std::min(stdout_focus_line_, 
                                           std::max(0, static_cast<int>(stdout_lines.size()) - 1));
@@ -246,7 +293,7 @@ private:
             if (event == Event::ArrowDown || event == Event::Character('j')) {
                 const std::string& content = stdout_pane_focused_ ? current_stdout_ : current_stderr_;
                 int& focus_line = stdout_pane_focused_ ? stdout_focus_line_ : stderr_focus_line_;
-                auto lines = split_lines(content);
+                auto lines = wrap_lines(split_lines(content), wrap_width_);
                 if (focus_line + 1 < static_cast<int>(lines.size())) {
                     ++focus_line;
                 }
@@ -260,7 +307,7 @@ private:
             if (event == Event::PageDown) {
                 const std::string& content = stdout_pane_focused_ ? current_stdout_ : current_stderr_;
                 int& focus_line = stdout_pane_focused_ ? stdout_focus_line_ : stderr_focus_line_;
-                auto lines = split_lines(content);
+                auto lines = wrap_lines(split_lines(content), wrap_width_);
                 focus_line = std::min(std::max(0, static_cast<int>(lines.size()) - 1), focus_line + 10);
                 return true;
             }
@@ -362,8 +409,8 @@ private:
     }
 
     void reset_scroll_to_bottom() {
-        auto stdout_lines = split_lines(current_stdout_);
-        auto stderr_lines = split_lines(current_stderr_);
+        auto stdout_lines = wrap_lines(split_lines(current_stdout_), wrap_width_);
+        auto stderr_lines = wrap_lines(split_lines(current_stderr_), wrap_width_);
         stdout_focus_line_ = stdout_lines.empty() ? 0 : static_cast<int>(stdout_lines.size()) - 1;
         stderr_focus_line_ = stderr_lines.empty() ? 0 : static_cast<int>(stderr_lines.size()) - 1;
     }
@@ -388,6 +435,7 @@ private:
     }
 
     int tick_interval_ms_;
+    int wrap_width_;
     size_t selected_index_;
     int stdout_focus_line_;
     int stderr_focus_line_;
@@ -404,8 +452,8 @@ private:
     FileWatcher file_watcher_;
 };
 
-void run_monitor(int tick_interval_ms) {
-    MonitorImpl monitor(tick_interval_ms);
+void run_monitor(int tick_interval_ms, int wrap_width) {
+    MonitorImpl monitor(tick_interval_ms, wrap_width);
     monitor.run();
 }
 
